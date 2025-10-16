@@ -33,11 +33,11 @@ class StudyBuddyViewModel(
     private val _timeRemainingMs = MutableStateFlow(0L)
     val timeRemainingMs: StateFlow<Long> = _timeRemainingMs
 
-    // Estado para el contenido generado. Sigue siendo privado.
+    // Estado para el contenido generado (Consejos/Resúmenes de IA)
     private val _aiContentResult = MutableStateFlow<String?>(null)
-    val aiContentResult: StateFlow<String?> = _aiContentResult // <--- ESTE ES OBSERVADO POR LA UI
+    val aiContentResult: StateFlow<String?> = _aiContentResult // ESTE ES OBSERVADO POR LA UI
 
-    // Configuración Pomodoro
+    // Configuración Pomodoro (25/5 minutos)
     private val workDurationMs = 25 * 60 * 1000L
     private val shortBreakMs = 5 * 60 * 1000L
     private val longBreakMs = 15 * 60 * 1000L
@@ -56,25 +56,7 @@ class StudyBuddyViewModel(
             }
     }
 
-    // Inicializa con algunas tareas de ejemplo si la lista está vacía
-    init {
-        // Inicialización simulada de tareas si es necesario
-        if (_tasks.value.isEmpty()) {
-            _tasks.update {
-                listOf(
-                    Task(
-                        id = UUID.randomUUID().toString(),
-                        name = "Estadística Básica",
-                        subject = "Matemáticas",
-                        dueDate = System.currentTimeMillis(), // Usamos la fecha actual como ejemplo
-                        userDifficulty = DifficultyLevel.MEDIUM,
-                        details = "Repaso de la media y la varianza"
-                    )
-                )
-            }
-            updateSortedTasks()
-        }
-    }
+
 
 
     /** Limpia el resultado del contenido de IA para cerrar el diálogo en la UI. */
@@ -87,19 +69,22 @@ class StudyBuddyViewModel(
     /** Añade una nueva tarea y ejecuta el análisis de IA. */
     fun addTask(task: Task) {
         viewModelScope.launch {
+            // 1. Añadir la tarea inicial (sin datos de IA) a la lista
             _tasks.update { it + task }
             updateSortedTasks()
 
-            // Simulación o lógica de análisis de dificultad
+            // 2. Ejecutar el análisis de dificultad de la IA
             try {
-                // Asumiendo que analyzeDifficulty ahora devuelve un objeto con los campos necesarios
                 val result = geminiService.analyzeDifficulty(task)
 
+                // 3. Actualizar el StateFlow de tareas con los datos de la IA
                 _tasks.update { list ->
                     list.map {
+                        // Buscamos la tarea recién añadida por ID y creamos una copia con los datos de la IA
                         if (it.id == task.id) {
                             it.copy(
                                 aiDifficulty = result.difficulty,
+                                // Casteo seguro de String (desde la IA) a Int
                                 recommendedTimeMin = result.recommendedTimeMin,
                                 aiReasoning = result.reasoning
                             )
@@ -111,6 +96,7 @@ class StudyBuddyViewModel(
             } catch (e: Exception) {
                 println("Error al analizar la dificultad con Gemini: ${e.message}")
             }
+            // 4. Aseguramos que la lista se reordena/refresca
             updateSortedTasks()
         }
     }
@@ -151,7 +137,6 @@ class StudyBuddyViewModel(
     }
 
     /** Llama al servicio de IA para generar consejos de estudio. */
-    // actualiza el StateFlow en lugar de devolver un String.
     fun getAITips(task: Task) {
         viewModelScope.launch {
             // 1. Mensaje de carga
@@ -161,10 +146,10 @@ class StudyBuddyViewModel(
                 // 2. Llama a la función suspend del servicio
                 val tips = geminiService.generateStudyTips(task)
 
-                // 3. ACTUALIZA EL STATEFLOW para que la UI se refresque automáticamente.
+                // 3. ACTUALIZA EL STATEFLOW para mostrar el resultado en la UI.
                 _aiContentResult.value = tips
 
-                // 4. Actualiza también la tarea si deseas persistir los consejos
+                // 4. (Opcional) Persistir los consejos en la tarea
                 _tasks.update { list ->
                     list.map { if (it.id == task.id) it.copy(aiStudyTips = tips) else it }
                 }
@@ -177,13 +162,26 @@ class StudyBuddyViewModel(
         }
     }
 
+    /** Llama al servicio de IA para generar contenido educativo (resumen, flashcards, etc.). */
+    fun generateContentForTask(task: Task, contentType: String) {
+        viewModelScope.launch {
+            _aiContentResult.value = "Generando $contentType para ${task.name}..."
+            try {
+                val content = geminiService.generateContent(task, contentType)
+                _aiContentResult.value = content
+            } catch (e: Exception) {
+                println("Error al generar contenido con Gemini: ${e.message}")
+                _aiContentResult.value = "Error al generar contenido: ${e.message}"
+            }
+        }
+    }
 
 
     // --- POMODORO TIMER ---
 
     /** Inicia o reanuda el temporizador para una tarea. */
     fun startPomodoro(task: Task) {
-        timerJob?.cancel() // Cancela cualquier trabajo anterior
+        timerJob?.cancel()
 
         // Si es una nueva tarea o estaba inactiva
         if (_currentTask.value?.id != task.id || _timerState.value == PomodoroState.IDLE) {
@@ -192,21 +190,36 @@ class StudyBuddyViewModel(
             _timerState.value = PomodoroState.WORK
             _timeRemainingMs.value = workDurationMs
         } else if (_timerState.value == PomodoroState.PAUSED) {
-            // Si estaba pausado, reanuda el estado actual
+            // Si estaba pausado, reanuda el estado actual (re-usa el tiempo restante)
             _timerState.value = when (_currentTask.value!!.pomodoroCycles % cyclesBeforeLongBreak == 0 && _timeRemainingMs.value <= longBreakMs) {
                 true -> PomodoroState.LONG_BREAK
                 false -> if (_timeRemainingMs.value > 0) PomodoroState.WORK else PomodoroState.SHORT_BREAK
             }
         } else {
-            return
+            return // Ya está corriendo
         }
 
         runTimer()
     }
 
-    /** Pausa el temporizador. */
+    /** Pausa el temporizador y registra el tiempo de trabajo parcial. */
     fun pausePomodoro() {
         timerJob?.cancel()
+
+        val task = _currentTask.value
+        // Solo calculamos y registramos si estábamos en el estado WORK (o PAUSED si viene de WORK)
+        if ((_timerState.value == PomodoroState.WORK || _timerState.value == PomodoroState.PAUSED) && task != null) {
+
+            // Calculamos el tiempo transcurrido en el ciclo actual.
+            val timeElapsedMs = workDurationMs - _timeRemainingMs.value
+
+            // Registramos el tiempo parcial de TRABAJO (0 ciclos completados).
+            // Solo registra si ha pasado al menos un segundo de trabajo.
+            if (timeElapsedMs > 1000L) {
+                updateTaskTimeSpent(task, timeElapsedMs, 0)
+            }
+        }
+
         _timerState.value = PomodoroState.PAUSED
     }
 
@@ -219,7 +232,7 @@ class StudyBuddyViewModel(
 
                 if (_timeRemainingMs.value <= 0) {
                     handleTimerEnd()
-                    break // Detiene el bucle si termina el tiempo
+                    break
                 }
             }
         }
@@ -233,35 +246,50 @@ class StudyBuddyViewModel(
 
         when (_timerState.value) {
             PomodoroState.WORK -> {
-                // Actualiza el tiempo total dedicado a la tarea
+                // Actualiza el tiempo total dedicado a la tarea con el ciclo COMPLETO (1 ciclo).
                 updateTaskTimeSpent(currentTask, workDurationMs, 1)
 
                 val nextCycles = currentCycles + 1
 
                 if (nextCycles % cyclesBeforeLongBreak == 0) {
-                    // Inicia un descanso largo
                     _timerState.value = PomodoroState.LONG_BREAK
                     _timeRemainingMs.value = longBreakMs
                 } else {
-                    // Inicia un descanso corto
                     _timerState.value = PomodoroState.SHORT_BREAK
                     _timeRemainingMs.value = shortBreakMs
                 }
                 runTimer()
             }
             PomodoroState.SHORT_BREAK, PomodoroState.LONG_BREAK -> {
-                // Termina el descanso, vuelve al trabajo
                 _timerState.value = PomodoroState.WORK
                 _timeRemainingMs.value = workDurationMs
                 runTimer()
             }
-            else -> {} // No debería pasar
+            else -> {}
         }
     }
 
-    /** Reinicia el temporizador y vuelve al estado IDLE. */
+    /** Reinicia el temporizador, registra el tiempo parcial si existe y mueve la tarea a TODO. */
     fun resetPomodoro() {
         timerJob?.cancel()
+
+        val task = _currentTask.value
+
+        // Registrar el tiempo parcial antes de resetear
+        // Solo si estaba en WORK o PAUSED, y no en un estado de descanso
+        if (task != null && (_timerState.value == PomodoroState.WORK || _timerState.value == PomodoroState.PAUSED)) {
+
+            // Calcular el tiempo transcurrido (ya sea en WORK o PAUSED)
+            val timeElapsedMs = workDurationMs - _timeRemainingMs.value
+
+            if (timeElapsedMs > 1000L) {
+                updateTaskTimeSpent(task, timeElapsedMs, 0)
+            }
+
+            // Mover la tarea de vuelta a TODO/PENDIENTE
+            updateTaskStatus(task, TaskStatus.TODO)
+        }
+
         _timerState.value = PomodoroState.IDLE
         _timeRemainingMs.value = 0L
         _currentTask.value = null
