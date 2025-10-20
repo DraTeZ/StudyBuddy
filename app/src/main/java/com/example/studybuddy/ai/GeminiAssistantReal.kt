@@ -62,7 +62,7 @@ class GeminiAssistantReal : GeminiAssistantService { // <-- Constructor limpio
         delay(500) // Simula la latencia de la red
         val difficultyName = task.aiDifficulty?.name ?: DifficultyLevel.EASY.name
 
-        val prompt = "Genera 5 consejos de estudio concisos para el tema: ${task.name}, tenieno en cuenta estos detalles ${task.details}. Nivel de dificultad: $difficultyName. No debe superar los 250 caracteres"
+        val prompt = "Genera 5 consejos de estudio concisos para el tema: ${task.name}, tenieno en cuenta estos detalles ${task.details}. Nivel de dificultad: ${task.aiDifficulty}. No debe superar los 250 caracteres"
 
         val response = model.generateContent(prompt)
         return response.text ?: "No se pudieron generar consejos de estudio."
