@@ -350,9 +350,31 @@ fun AddTaskDialog(onDismiss: () -> Unit, onTaskAdded: (Task) -> Unit) {
                 )
             }
         },
-        // ... (confirmButton y dismissButton, sin cambios)
-        confirmButton = { /* ... */ },
-        dismissButton = { /* ... */ }
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (name.isNotBlank() && subject.isNotBlank()) {
+                        val newTask = Task(
+                            id = UUID.randomUUID().toString(), // Generación de ID
+                            name = name,
+                            subject = subject,
+                            dueDate = Date(dueDate), // Usamos el valor seleccionado
+                            userDifficulty = difficulty,
+                            details = details
+                        )
+                        onTaskAdded(newTask)
+                    }
+                },
+                enabled = name.isNotBlank() && subject.isNotBlank()
+            ) {
+                Text("Añadir")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
+            }
+        }
     )
 
     // El Composable del Selector de Fecha (DatePickerDialog)
