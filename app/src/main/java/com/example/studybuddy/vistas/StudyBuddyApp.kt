@@ -76,7 +76,7 @@ fun StudyBuddyApp(viewModel: StudyBuddyViewModel = viewModel()) {
                 onTaskAction = { task, action ->
                     when (action) {
                         "start" -> viewModel.startPomodoro(task)
-                        "complete" -> viewModel.updateTaskStatus(task, TaskStatus.COMPLETED)
+                        "complete" -> viewModel.updateTaskStatus(task.id, TaskStatus.COMPLETED)
                         "delete" -> viewModel.deleteTask(task)
                     }
                 }
@@ -254,7 +254,7 @@ fun TaskItem(task: Task, onTaskAction: (Task, String) -> Unit) {
                 Text("Materia: ${task.subject}", fontSize = 12.sp, color = Color.Gray)
                 Text(aiDetails, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                 Text(
-                    "Dedicado: ${task.pomodoroCycles} ciclos | ${task.timeSpentMs / 60000} min",
+                    "Dedicado: ${task.totalPomodoroCycles} ciclos | ${task.totalTimeSpentMs / 60000} min",
                     fontSize = 12.sp,
                     color = Color.DarkGray
                 )
@@ -338,7 +338,7 @@ fun AddTaskDialog(onDismiss: () -> Unit, onTaskAdded: (Task) -> Unit) {
                             id = UUID.randomUUID().toString(), // Generación de ID
                             name = name,
                             subject = subject,
-                            dueDate = dueDate, // Usamos el valor seleccionado
+                            dueDate = Date(dueDate), // Usamos el valor seleccionado
                             userDifficulty = difficulty,
                             details = details
                         )
