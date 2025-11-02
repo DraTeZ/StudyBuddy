@@ -1,5 +1,5 @@
 plugins {
-    alias(libs.plugins.android.application)
+    alias(libs.plugins.android.application) version "8.4.1"
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.gms.google.services)
@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.studybuddy"
-    compileSdk = 36
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.example.studybuddy"
@@ -40,32 +40,46 @@ android {
     }
 }
 
-dependencies {
 
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.activity.compose)
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.material3)
-    implementation(libs.firebase.ai)
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    debugImplementation(libs.androidx.compose.ui.tooling)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
-    implementation(platform("com.google.firebase:firebase-bom:34.4.0"))
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+dependencies {
+    // 1. Definimos la "lista de materiales" (BOM) para que gestione las versiones de Compose
+    val composeBomVersion = "2024.04.01"
+    implementation(platform("androidx.compose:compose-bom:$composeBomVersion"))
+    androidTestImplementation(platform("androidx.compose:compose-bom:$composeBomVersion"))
+
+    // 2. Dependencias principales con versiones manuales y estables
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.activity:activity-compose:1.9.0")
+
+    // 3. Dependencias de Lifecycle (controlamos la versión para evitar errores)
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
 
-    implementation("androidx.compose.material:material-icons-extended-android:1.7.8")
+    // 4. Dependencias de Compose (SIN versión, la BOM se encarga)
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended") // Versión controlada por la BOM
 
-    // Firebase
-    implementation(libs.firebase.auth)
-    implementation(libs.firebase.firestore)
+    // 5. Dependencias de Firebase
+    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    // implementation(libs.firebase.ai) // Descomenta esta si la necesitas
+    implementation(libs.firebase.ai)
+
+    // 6. Dependencias para Testing
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("androidx.compose.foundation:foundation")
+
+    // 7. Dependencias para el calendario
+
 }

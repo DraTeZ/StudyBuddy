@@ -1,6 +1,7 @@
     package com.example.studybuddy.presentacion
 
     import android.util.Log
+    import kotlinx.coroutines.flow.asStateFlow
     import androidx.lifecycle.ViewModel
     import androidx.lifecycle.viewModelScope
     import com.example.studybuddy.ai.GeminiAssistantService
@@ -68,6 +69,69 @@
         // Helper para agrupar y ordenar tareas
         val sortedTasks: StateFlow<Map<TaskStatus, List<Task>>> = MutableStateFlow(emptyMap())
 
+        private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
+        val authState: StateFlow<AuthState> = _authState.asStateFlow()
+
+        // 2. Función para manejar el login
+        fun login(email: String, pass: String) {
+            viewModelScope.launch {
+                _authState.value = AuthState.Loading
+                // --- SIMULACIÓN DE LLAMADA A SERVIDOR ---
+                delay(1500) // Simulamos que tarda 1.5 segundos
+
+                if (email.isNotBlank() && pass.length > 5) {
+
+                    performAnonymousLogin()
+                } else {
+                    // Lógica de error
+                    _authState.value = AuthState.Error("Correo o contraseña inválidos.")
+                }
+            }
+        }
+
+        private fun performAnonymousLogin() {
+
+            if (auth.currentUser == null) {
+                auth.signInAnonymously()
+                    .addOnCompleteListener { task ->
+                        if (task.isSuccessful) {
+                            Log.d("ViewModel", "signInAnonymously:success")
+
+                            onUserAuthenticated()
+
+                            _authState.value = AuthState.Success
+                        } else {
+                            Log.w("ViewModel", "signInAnonymously:failure", task.exception)
+                            _authState.value = AuthState.Error("No se pudo conectar con la base de datos.")
+                        }
+                    }
+            } else {
+                // El usuario ya estaba logueado (sesión recordada)
+                Log.d("ViewModel", "User already signed in, proceeding.")
+                onUserAuthenticated()
+                _authState.value = AuthState.Success
+            }
+        }
+
+        // 3. Función para manejar el registro
+        fun register(name: String, email: String, pass: String) {
+            viewModelScope.launch {
+                _authState.value = AuthState.Loading
+                // --- SIMULACIÓN DE LLAMADA A SERVIDOR ---
+                delay(2000) // Simulamos que tarda 2 segundos
+
+                if (name.isNotBlank() && email.contains("@") && pass.length > 5) {
+                    _authState.value = AuthState.Success
+                } else {
+                    _authState.value = AuthState.Error("Por favor, completa todos los campos correctamente.")
+                }
+            }
+        }
+
+        // 4. Función para resetear el estado (útil para la navegación)
+        fun resetAuthState() {
+            _authState.value = AuthState.Idle
+        }
         fun onUserAuthenticated() {
             userId = auth.currentUser?.uid
             if (userId == null) {
@@ -391,4 +455,100 @@
                 }
             }
         }
+
+        private val _resetState = MutableStateFlow<PasswordResetState>(PasswordResetState.Idle)
+        val resetState: StateFlow<PasswordResetState> = _resetState.asStateFlow()
+
+        fun sendPasswordReset(email: String) {
+            viewModelScope.launch {
+                _resetState.value = PasswordResetState.Loading
+                delay(1500)
+
+                if (email.isNotBlank() && email.contains("@")) {
+                    Log.d("ViewModel", "Enviando al correo registrado $email")
+                    _resetState.value = PasswordResetState.Success
+                } else {
+                    _resetState.value = PasswordResetState.Error("Correo electrónico inválido.")
+                }
+            }
+        }
+
+        fun resetPasswordResetState() {
+            _resetState.value = PasswordResetState.Idle
+        }
+        private val _reportState = MutableStateFlow<FeedbackState>(FeedbackState.Idle)
+        val reportState: StateFlow<FeedbackState> = _reportState.asStateFlow()
+
+        fun submitReport(reportText: String) {
+            viewModelScope.launch {
+                _reportState.value = FeedbackState.Loading
+                delay(1500)
+
+                if (reportText.length > 10) {
+                    Log.d("ViewModel", "Reporte enviado: $reportText")
+                    _reportState.value = FeedbackState.Success
+                } else {
+                    _reportState.value = FeedbackState.Error("Por favor, cuéntanos más acerca de tu problema.")
+                }
+            }
+        }
+
+        fun resetReportState() {
+            _reportState.value = FeedbackState.Idle
+        }
+        private val _feedbackState = MutableStateFlow<FeedbackState>(FeedbackState.Idle)
+        val feedbackState: StateFlow<FeedbackState> = _feedbackState.asStateFlow()
+
+        fun sendFeedback(type: String, description: String) {
+            viewModelScope.launch {
+                _feedbackState.value = FeedbackState.Loading
+                delay(1500)
+
+                if (description.length > 10) {
+                    Log.d("ViewModel", "Enviando feedback: $type - $description")
+                    _feedbackState.value = FeedbackState.Success
+                } else {
+                    _feedbackState.value = FeedbackState.Error("La descripción es muy corta.")
+                }
+            }
+        }
+
+        fun resetFeedbackState() {
+            _feedbackState.value = FeedbackState.Idle
+        }
+
+        fun logout() {
+            auth.signOut()
+            userId = null // Limpia el ID de usuario
+
+
+            timerJob?.cancel()
+            _tasks.value = emptyList()
+            _currentTask.value = null
+            _timerState.value = PomodoroState.IDLE
+            _timeRemainingMs.value = 0L
+
+            _authState.value = AuthState.Idle
+        }
+    }
+
+    sealed interface AuthState {
+        object Idle : AuthState       // Estado inicial
+        object Loading : AuthState    // Cargando...
+        object Success : AuthState    // Éxito
+        data class Error(val message: String) : AuthState // Error con mensaje
+    }
+
+    sealed interface PasswordResetState {
+        object Idle : PasswordResetState
+        object Loading : PasswordResetState
+        object Success : PasswordResetState
+        data class Error(val message: String) : PasswordResetState
+    }
+
+    sealed interface FeedbackState {
+        object Idle : FeedbackState
+        object Loading : FeedbackState
+        object Success : FeedbackState
+        data class Error(val message: String) : FeedbackState
     }

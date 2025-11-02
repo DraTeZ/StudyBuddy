@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.studybuddy.data.Task
+import com.example.studybuddy.ui.theme.VerdeSuave
 import com.example.studybuddy.data.enums.DifficultyLevel
 import com.example.studybuddy.data.enums.PomodoroState
 import com.example.studybuddy.data.enums.TaskStatus
@@ -29,72 +30,56 @@ import java.util.UUID
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.example.studybuddy.presentacion.AuthState
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun StudyBuddyApp(viewModel: StudyBuddyViewModel = viewModel()) {
-    val sortedTasks by viewModel.sortedTasks.collectAsState()
+fun HomeScreen(viewModel: StudyBuddyViewModel) {
     val currentTask by viewModel.currentTask.collectAsState()
     val timerState by viewModel.timerState.collectAsState()
     val timeRemainingMs by viewModel.timeRemainingMs.collectAsState()
-
-    // Observamos el StateFlow que contiene los consejos de IA.
     val aiContent by viewModel.aiContentResult.collectAsState()
+    val sortedTasks by viewModel.sortedTasks.collectAsState()
 
-    var showAddTaskDialog by remember { mutableStateOf(false) }
+    // --- ESTA LÓGICA SUBE AL CONTENEDOR PRINCIPAL ---
+    // var showAddTaskDialog by remember { mutableStateOf(false) }
+    // Ya no necesitamos el Scaffold, TopAppBar, ni el FAB aquí.
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Study Buddy AI", fontWeight = FontWeight.Bold) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showAddTaskDialog = true }) {
-                Icon(Icons.Filled.Add, contentDescription = "Añadir Tarea")
-            }
-        }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            PomodoroTimer(
-                currentTask = currentTask,
-                timerState = timerState,
-                timeRemainingMs = timeRemainingMs,
-                aiContent = aiContent,
-                onStart = viewModel::startPomodoro,
-                onPause = viewModel::pausePomodoro,
-                onReset = viewModel::resetPomodoro,
-                onGetTips = viewModel::getAITips,
-                onContentDismiss = viewModel::clearAIContentResult // Llama a la función pública del VM
-            )
-            Divider(Modifier.padding(vertical = 8.dp))
-            TaskList(
-                sortedTasks = sortedTasks,
-                onTaskAction = { task, action ->
-                    when (action) {
-                        "start" -> viewModel.startPomodoro(task)
-                        "complete" -> viewModel.updateTaskStatus(task.id, TaskStatus.COMPLETED)
-                        "delete" -> viewModel.deleteTask(task)
-                    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+        // Ya no necesitamos el padding, el Scaffold padre se lo dará
+    ) {
+        PomodoroTimer(
+            currentTask = currentTask,
+            timerState = timerState,
+            timeRemainingMs = timeRemainingMs,
+            aiContent = aiContent,
+            onStart = viewModel::startPomodoro,
+            onPause = viewModel::pausePomodoro,
+            onReset = viewModel::resetPomodoro,
+            onGetTips = viewModel::getAITips,
+            onContentDismiss = viewModel::clearAIContentResult
+        )
+        Divider(Modifier.padding(vertical = 8.dp))
+        TaskList(
+            sortedTasks = sortedTasks,
+            onTaskAction = { task, action ->
+                when (action) {
+                    "start" -> viewModel.startPomodoro(task)
+                    "complete" -> viewModel.updateTaskStatus(task.id, TaskStatus.COMPLETED)
+                    "delete" -> viewModel.deleteTask(task)
                 }
-            )
-        }
-    }
-
-    if (showAddTaskDialog) {
-        AddTaskDialog(
-            onDismiss = { showAddTaskDialog = false },
-            onTaskAdded = { task ->
-                viewModel.addTask(task)
-                showAddTaskDialog = false
             }
         )
     }
+
+    // --- EL DIÁLOGO TAMBIÉN DEBE SUBIR ---
+    // if (showAddTaskDialog) { ... }
 }
 
 @Composable
@@ -121,11 +106,13 @@ fun PomodoroTimer(
             .padding(16.dp),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = when(timerState) {
-            PomodoroState.WORK -> Color(0xFFF7F0E8) // Beige claro
-            PomodoroState.SHORT_BREAK, PomodoroState.LONG_BREAK -> Color(0xFFE8F7F0) // Verde claro
-            else -> MaterialTheme.colorScheme.surfaceVariant
-        })
+        //colors = CardDefaults.cardColors(containerColor = when(timerState) {
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+           // PomodoroState.WORK -> Color(0xFFF7F0E8) // Beige claro
+           // PomodoroState.SHORT_BREAK, PomodoroState.LONG_BREAK -> Color(0xFFE8F7F0) // Verde claro
+         //   else -> MaterialTheme.colorScheme.surfaceVariant
+        )
     ) {
         Column(
             modifier = Modifier
@@ -139,15 +126,16 @@ fun PomodoroTimer(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
+            val (stateText, stateColor) = when (timerState) {
+                PomodoroState.WORK -> "¡ENFOQUE!" to MaterialTheme.colorScheme.primary
+                PomodoroState.SHORT_BREAK -> "Descanso Corto" to MaterialTheme.colorScheme.secondary
+                PomodoroState.LONG_BREAK -> "Descanso Largo" to MaterialTheme.colorScheme.secondary
+                PomodoroState.PAUSED -> "PAUSADO" to MaterialTheme.colorScheme.tertiary
+                PomodoroState.IDLE -> "Listo" to VerdeSuave
+            }
             Text(
-                text = when (timerState) {
-                    PomodoroState.WORK -> "¡ENFOQUE!"
-                    PomodoroState.SHORT_BREAK -> "Descanso Corto"
-                    PomodoroState.LONG_BREAK -> "Descanso Largo"
-                    PomodoroState.PAUSED -> "PAUSADO"
-                    PomodoroState.IDLE -> "Listo"
-                },
-                color = MaterialTheme.colorScheme.primary,
+                text = stateText,
+                color = stateColor,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
@@ -156,7 +144,7 @@ fun PomodoroTimer(
                 text = timeDisplay,
                 fontSize = 60.sp,
                 fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.primary
             )
             Spacer(Modifier.height(16.dp))
 
@@ -218,7 +206,8 @@ fun TaskList(
                     Text(
                         text = status.label,
                         style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(16.dp, 8.dp)
+                        modifier = Modifier.padding(16.dp, 8.dp),
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
                 items(tasks) { task ->
@@ -243,7 +232,8 @@ fun TaskItem(task: Task, onTaskAction: (Task, String) -> Unit) {
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .clickable { onTaskAction(task, "start") },
         shape = RoundedCornerShape(8.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
             modifier = Modifier
@@ -254,6 +244,11 @@ fun TaskItem(task: Task, onTaskAction: (Task, String) -> Unit) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(task.name, fontWeight = FontWeight.Bold)
                 Text("Materia: ${task.subject}", fontSize = 12.sp, color = Color.Gray)
+                Text(
+                    aiDetails,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
                 Text(aiDetails, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                 Text(
                     "Dedicado: ${task.totalPomodoroCycles} ciclos | ${task.totalTimeSpentMs / 60000} min",
@@ -266,12 +261,12 @@ fun TaskItem(task: Task, onTaskAction: (Task, String) -> Unit) {
                     Icon(
                         Icons.Filled.CheckCircle,
                         contentDescription = "Marcar como completada",
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = VerdeSuave
                     )
                 }
             }
             IconButton(onClick = { onTaskAction(task, "delete") }) {
-                Icon(Icons.Filled.Delete, contentDescription = "Eliminar", tint = Color.Red)
+                Icon(Icons.Filled.Delete, contentDescription = "Eliminar", tint = MaterialTheme.colorScheme.error)
             }
         }
     }
@@ -406,6 +401,98 @@ fun AddTaskDialog(onDismiss: () -> Unit, onTaskAdded: (Task) -> Unit) {
             }
         ) {
             DatePicker(state = datePickerState)
+        }
+    }
+}
+
+@Composable
+fun StudyBuddyApp(viewModel: StudyBuddyViewModel) {
+    val navController = rememberNavController()
+    val authState by viewModel.authState.collectAsState()
+    LaunchedEffect(authState) {
+        if (authState is AuthState.Idle && navController.currentDestination?.route != "login") {
+
+            navController.navigate("login") {
+                popUpTo(navController.graph.id) {
+                    inclusive = true
+                }
+            }
+        }
+    }
+
+    NavHost(navController = navController, startDestination = "login") {
+
+        composable("login") {
+            LoginScreen(
+                onLoginSuccess = {
+                    navController.navigate("main") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                },
+                onCreateAccountClick = {
+                    navController.navigate("register")
+                },
+                viewModel = viewModel,
+                onForgotPasswordClick = {
+                     navController.navigate("forgot_password")
+                },
+                onHelpClick = {
+                     navController.navigate("help")
+                },
+                onReportProblemClick = {
+                     navController.navigate("report_problem")
+                }
+            )
+        }
+
+        composable("register") {
+            RegisterScreen(
+                onRegisterSuccess = {
+                    navController.navigate("main") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                },
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                viewModel = viewModel,
+                        onLoginClick = {
+
+                    navController.popBackStack()
+                },
+                onHelpClick = {
+                     navController.navigate("help")
+                },
+                onReportProblemClick = {
+                     navController.navigate("report_problem")
+                }
+            )
+        }
+
+        composable("main") {
+            AppScreen(
+                viewModel = viewModel,
+                onLogout = {
+                }
+            )
+        }
+
+        composable("forgot_password") {
+            ForgotPasswordScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+        composable("help") {
+            HelpScreen(
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+        composable("report_problem") {
+            ReportProblemScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() }
+            )
         }
     }
 }
