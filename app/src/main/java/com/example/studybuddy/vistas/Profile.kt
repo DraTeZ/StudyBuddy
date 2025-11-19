@@ -16,18 +16,20 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.studybuddy.presentacion.StudyBuddyViewModel
+import com.google.firebase.auth.auth
+import com.google.firebase.Firebase
 
 @Composable
 fun ProfileScreen(
     viewModel: StudyBuddyViewModel,
     onLogout: () -> Unit
 ) {
-    // Por ahora, usamos datos de ejemplo.
-    // En el futuro, se obtendrian de `viewModel.auth.currentUser`
-    val userName = "David"
-    val userEmail = "david@example.com"
+    val currentUser = Firebase.auth.currentUser
+    val userName = currentUser?.displayName ?: "Sin Nombre"
+    val userEmail = currentUser?.email ?: "Sin Correo"
 
-    var isDarkMode by remember { mutableStateOf(false) }
+    val isDarkMode by viewModel.isDarkMode.collectAsState()
+
     var showAboutDialog by remember { mutableStateOf(false) }
 
     if (showAboutDialog) {
@@ -82,12 +84,12 @@ fun ProfileScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
 
+            // --- Usar los valores reales ---
             ProfileInfoItem(title = "Nombre", subtitle = userName)
             Divider()
             ProfileInfoItem(title = "Correo", subtitle = userEmail)
 
             Spacer(modifier = Modifier.height(32.dp))
-
 
             Text(
                 "Ajustes",
@@ -96,11 +98,12 @@ fun ProfileScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
 
+            // --- Conectar el Toggle al ViewModel ---
             SettingItemToggle(
                 title = "Modo Oscuro",
                 icon = Icons.Default.Palette,
                 checked = isDarkMode,
-                onCheckedChange = { isDarkMode = it }
+                onCheckedChange = { viewModel.setDarkMode(it) }
             )
             Divider()
 
@@ -112,10 +115,7 @@ fun ProfileScreen(
         }
 
         Button(
-            onClick = {
-                viewModel.logout()
-                onLogout()
-            },
+            onClick = onLogout,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 32.dp),
@@ -171,7 +171,7 @@ fun SettingItemToggle(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
+            .clickable { onCheckedChange(!checked) } // Toggle al hacer clic en la fila
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

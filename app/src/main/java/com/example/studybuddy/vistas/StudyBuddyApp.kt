@@ -15,7 +15,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.studybuddy.data.Task
 import com.example.studybuddy.ui.theme.VerdeSuave
 import com.example.studybuddy.data.enums.DifficultyLevel
@@ -34,7 +33,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.studybuddy.presentacion.AuthState
-
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,15 +44,11 @@ fun HomeScreen(viewModel: StudyBuddyViewModel) {
     val timeRemainingMs by viewModel.timeRemainingMs.collectAsState()
     val aiContent by viewModel.aiContentResult.collectAsState()
     val sortedTasks by viewModel.sortedTasks.collectAsState()
-
-    // --- ESTA LÓGICA SUBE AL CONTENEDOR PRINCIPAL ---
-    // var showAddTaskDialog by remember { mutableStateOf(false) }
-    // Ya no necesitamos el Scaffold, TopAppBar, ni el FAB aquí.
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-        // Ya no necesitamos el padding, el Scaffold padre se lo dará
     ) {
         PomodoroTimer(
             currentTask = currentTask,
@@ -72,14 +68,18 @@ fun HomeScreen(viewModel: StudyBuddyViewModel) {
                 when (action) {
                     "start" -> viewModel.startPomodoro(task)
                     "complete" -> viewModel.updateTaskStatus(task.id, TaskStatus.COMPLETED)
-                    "delete" -> viewModel.deleteTask(task)
+
+                    "delete" -> {
+                        if (currentTask?.id == task.id && timerState != PomodoroState.IDLE) {
+                            Toast.makeText(context, "Detén el temporizador antes de borrar esta tarea", Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.deleteTask(task)
+                        }
+                    }
                 }
             }
         )
     }
-
-    // --- EL DIÁLOGO TAMBIÉN DEBE SUBIR ---
-    // if (showAddTaskDialog) { ... }
 }
 
 @Composable
@@ -97,7 +97,6 @@ fun PomodoroTimer(
     val formatter = remember { SimpleDateFormat("mm:ss", Locale.getDefault()) }
     val timeDisplay = formatter.format(Date(timeRemainingMs))
 
-    // El diálogo se muestra si hay contenido en el StateFlow
     val showTipsDialog = aiContent != null
 
     Card(
@@ -106,12 +105,8 @@ fun PomodoroTimer(
             .padding(16.dp),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        //colors = CardDefaults.cardColors(containerColor = when(timerState) {
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-           // PomodoroState.WORK -> Color(0xFFF7F0E8) // Beige claro
-           // PomodoroState.SHORT_BREAK, PomodoroState.LONG_BREAK -> Color(0xFFE8F7F0) // Verde claro
-         //   else -> MaterialTheme.colorScheme.surfaceVariant
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Column(
@@ -167,7 +162,6 @@ fun PomodoroTimer(
                     Button(onClick = onReset, enabled = timerState != PomodoroState.IDLE) {
                         Icon(Icons.Filled.Stop, contentDescription = "Reiniciar")
                     }
-                    // Botón para Consejos IA
                     Button(onClick = {
                         onGetTips(currentTask!!)
                     }) {
@@ -178,7 +172,6 @@ fun PomodoroTimer(
         }
     }
 
-    // Muestra el diálogo si showTipsDialog es true
     if (showTipsDialog && aiContent != null) {
         AlertDialog(
             onDismissRequest = onContentDismiss,
@@ -249,7 +242,7 @@ fun TaskItem(task: Task, onTaskAction: (Task, String) -> Unit) {
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.tertiary
                 )
-                Text(aiDetails, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                // Nota: La línea de aiDetails estaba duplicada en tu original, la he quitado.
                 Text(
                     "Dedicado: ${task.totalPomodoroCycles} ciclos | ${task.totalTimeSpentMs / 60000} min",
                     fontSize = 12.sp,
@@ -275,7 +268,6 @@ fun TaskItem(task: Task, onTaskAction: (Task, String) -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddTaskDialog(onDismiss: () -> Unit, onTaskAdded: (Task) -> Unit) {
-    // ... (Variables de estado)
     var name by remember { mutableStateOf("") }
     var subject by remember { mutableStateOf("") }
     var details by remember { mutableStateOf("") }
@@ -287,17 +279,14 @@ fun AddTaskDialog(onDismiss: () -> Unit, onTaskAdded: (Task) -> Unit) {
     var showDatePicker by remember { mutableStateOf(false) }
 
     val dateFormatter = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
-
-    // Obtenemos el estado de scroll para poder usar un modificador de scroll
     val scrollState = rememberScrollState()
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Añadir Nueva Tarea") },
         text = {
-            // 💥 CORRECCIÓN: Usamos Column con scroll vertical
             Column(
-                modifier = Modifier.verticalScroll(scrollState), // APLICAMOS EL SCROLL
+                modifier = Modifier.verticalScroll(scrollState),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre de la Tarea") }, modifier = Modifier.fillMaxWidth())
@@ -305,22 +294,21 @@ fun AddTaskDialog(onDismiss: () -> Unit, onTaskAdded: (Task) -> Unit) {
                 OutlinedTextField(value = details, onValueChange = { details = it }, label = { Text("Detalles Opcionales") }, modifier = Modifier.fillMaxWidth())
 
                 Spacer(Modifier.height(8.dp))
-                // Selector de Dificultad
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = "Dificultad Personal:",
-                        style = MaterialTheme.typography.titleSmall, // Opcional: mejora la tipografía
+                        style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween // Distribuye el espacio entre los botones
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         DifficultyLevel.entries.forEach { level ->
                             Row(modifier = Modifier.clickable { difficulty = level }, verticalAlignment = Alignment.CenterVertically) {
                                 RadioButton(selected = difficulty == level, onClick = { difficulty = level })
-                                Text(level.label) // Se removió el padding end para ahorrar espacio
+                                Text(level.label)
                             }
                         }
                     }
@@ -328,7 +316,6 @@ fun AddTaskDialog(onDismiss: () -> Unit, onTaskAdded: (Task) -> Unit) {
 
                 Spacer(Modifier.height(8.dp))
 
-                // Campo de entrada para la Fecha de Entrega con Selector
                 OutlinedTextField(
                     value = dateFormatter.format(Date(dueDate)),
                     onValueChange = { /* Deshabilitado */ },
@@ -336,7 +323,7 @@ fun AddTaskDialog(onDismiss: () -> Unit, onTaskAdded: (Task) -> Unit) {
                     readOnly = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { showDatePicker = true }, // Muestra el selector al hacer clic en el campo
+                        .clickable { showDatePicker = true },
                     trailingIcon = {
                         IconButton(onClick = { showDatePicker = true }) {
                             Icon(Icons.Filled.CalendarToday, contentDescription = "Seleccionar Fecha")
@@ -350,10 +337,10 @@ fun AddTaskDialog(onDismiss: () -> Unit, onTaskAdded: (Task) -> Unit) {
                 onClick = {
                     if (name.isNotBlank() && subject.isNotBlank()) {
                         val newTask = Task(
-                            id = UUID.randomUUID().toString(), // Generación de ID
+                            id = UUID.randomUUID().toString(),
                             name = name,
                             subject = subject,
-                            dueDate = Date(dueDate), // Usamos el valor seleccionado
+                            dueDate = Date(dueDate),
                             userDifficulty = difficulty,
                             details = details
                         )
@@ -372,7 +359,6 @@ fun AddTaskDialog(onDismiss: () -> Unit, onTaskAdded: (Task) -> Unit) {
         }
     )
 
-    // El Composable del Selector de Fecha (DatePickerDialog)
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = dueDate,
@@ -405,16 +391,26 @@ fun AddTaskDialog(onDismiss: () -> Unit, onTaskAdded: (Task) -> Unit) {
     }
 }
 
+
 @Composable
-fun StudyBuddyApp(viewModel: StudyBuddyViewModel) {
+fun StudyBuddyApp(
+    viewModel: StudyBuddyViewModel,
+    onLogout: () -> Unit,
+    onGoogleSignIn: () -> Unit
+) {
     val navController = rememberNavController()
     val authState by viewModel.authState.collectAsState()
-    LaunchedEffect(authState) {
-        if (authState is AuthState.Idle && navController.currentDestination?.route != "login") {
 
-            navController.navigate("login") {
-                popUpTo(navController.graph.id) {
-                    inclusive = true
+    // Este LaunchedEffect maneja la navegación automática
+    LaunchedEffect(authState) {
+        if (authState is AuthState.Success) {
+            navController.navigate("main") {
+                popUpTo("login") { inclusive = true }
+            }
+        } else if (authState is AuthState.Idle) {
+            if (navController.currentDestination?.route != "login") {
+                navController.navigate("login") {
+                    popUpTo(navController.graph.id) { inclusive = true }
                 }
             }
         }
@@ -425,46 +421,42 @@ fun StudyBuddyApp(viewModel: StudyBuddyViewModel) {
         composable("login") {
             LoginScreen(
                 onLoginSuccess = {
-                    navController.navigate("main") {
-                        popUpTo("login") { inclusive = true }
-                    }
+                    // No es necesario, el LaunchedEffect lo maneja
                 },
                 onCreateAccountClick = {
                     navController.navigate("register")
                 },
                 viewModel = viewModel,
                 onForgotPasswordClick = {
-                     navController.navigate("forgot_password")
+                    navController.navigate("forgot_password")
                 },
                 onHelpClick = {
-                     navController.navigate("help")
+                    navController.navigate("help")
                 },
                 onReportProblemClick = {
-                     navController.navigate("report_problem")
-                }
+                    navController.navigate("report_problem")
+                },
+                onGoogleSignInClicked = onGoogleSignIn
             )
         }
 
         composable("register") {
             RegisterScreen(
                 onRegisterSuccess = {
-                    navController.navigate("main") {
-                        popUpTo("login") { inclusive = true }
-                    }
+                    // No es necesario, el LaunchedEffect lo maneja
                 },
                 onBackClick = {
                     navController.popBackStack()
                 },
                 viewModel = viewModel,
-                        onLoginClick = {
-
+                onLoginClick = {
                     navController.popBackStack()
                 },
                 onHelpClick = {
-                     navController.navigate("help")
+                    navController.navigate("help")
                 },
                 onReportProblemClick = {
-                     navController.navigate("report_problem")
+                    navController.navigate("report_problem")
                 }
             )
         }
@@ -472,8 +464,7 @@ fun StudyBuddyApp(viewModel: StudyBuddyViewModel) {
         composable("main") {
             AppScreen(
                 viewModel = viewModel,
-                onLogout = {
-                }
+                onLogout = onLogout // Pasa el callback de MainActivity
             )
         }
 
