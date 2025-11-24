@@ -1,6 +1,15 @@
 package com.example.studybuddy.vistas
 
-
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import com.example.studybuddy.R
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -59,12 +68,20 @@ fun AppScreen(viewModel: StudyBuddyViewModel,onLogout: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = {
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Image(
+                            painter = painterResource(id = com.example.studybuddy.R.drawable.logo_studybuddy),
+                            contentDescription = "Logo",
+                            modifier = Modifier.size(65.dp) // Logo pequeño
+                        )
+                        Spacer(modifier = Modifier.width(12.dp)) // Espacio
                     val title = when (currentRoute) {
                         AppScreenRoute.Calendar.route -> "Calendario"
                         AppScreenRoute.Profile.route -> "Perfil y Ajustes"
-                        else -> "Study Buddy AI"
+                        else -> "Study Buddy"
                     }
                     Text(title, fontWeight = FontWeight.Bold)
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,

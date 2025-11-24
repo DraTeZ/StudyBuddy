@@ -159,7 +159,7 @@ fun LoginScreen(
             }
 
             // --- MANEJO DE ESTADO DE CARGA Y ERROR ---
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(32.dp))
             if (authState is AuthState.Loading) {
                 CircularProgressIndicator()
             } else if (authState is AuthState.Error) {
@@ -176,15 +176,11 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                TextButton(onClick = onHelpClick) {
-                    Text("Ayuda")
-                }
-                TextButton(onClick = onReportProblemClick) {
-                    Text("Reportar un problema")
-                }
+                TextButton(onClick = onHelpClick) { Text("Ayuda") }
+                TextButton(onClick = onReportProblemClick) { Text("Reportar un problema") }
             }
         }
     }

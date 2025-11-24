@@ -96,77 +96,116 @@ fun PomodoroTimer(
 ) {
     val formatter = remember { SimpleDateFormat("mm:ss", Locale.getDefault()) }
     val timeDisplay = formatter.format(Date(timeRemainingMs))
-
     val showTipsDialog = aiContent != null
 
+    // Colores según estado
+    val stateColor = when (timerState) {
+        PomodoroState.WORK -> MaterialTheme.colorScheme.primary
+        PomodoroState.SHORT_BREAK, PomodoroState.LONG_BREAK -> MaterialTheme.colorScheme.secondary
+        else -> MaterialTheme.colorScheme.tertiary
+    }
+
+    val stateText = when (timerState) {
+        PomodoroState.WORK -> "🧠 MODO ENFOQUE"
+        PomodoroState.SHORT_BREAK -> "☕ DESCANSO CORTO"
+        PomodoroState.LONG_BREAK -> "🎉 DESCANSO LARGO"
+        PomodoroState.PAUSED -> "⏸️ PAUSADO"
+        PomodoroState.IDLE -> "💤 LISTO PARA EMPEZAR"
+    }
+
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        shape = RoundedCornerShape(24.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(
-            modifier = Modifier
-                .padding(20.dp)
-                .fillMaxWidth(),
+            modifier = Modifier.padding(24.dp).fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Nombre de tarea
             Text(
-                text = currentTask?.name ?: "Selecciona una Tarea",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
+                text = currentTask?.name ?: "Selecciona una Tarea abajo 👇",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 16.dp)
             )
-            val (stateText, stateColor) = when (timerState) {
-                PomodoroState.WORK -> "¡ENFOQUE!" to MaterialTheme.colorScheme.primary
-                PomodoroState.SHORT_BREAK -> "Descanso Corto" to MaterialTheme.colorScheme.secondary
-                PomodoroState.LONG_BREAK -> "Descanso Largo" to MaterialTheme.colorScheme.secondary
-                PomodoroState.PAUSED -> "PAUSADO" to MaterialTheme.colorScheme.tertiary
-                PomodoroState.IDLE -> "Listo" to VerdeSuave
-            }
-            Text(
-                text = stateText,
-                color = stateColor,
-                fontWeight = FontWeight.Bold,
+
+            // Píldora de Estado
+            Surface(
+                color = stateColor.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(50),
                 modifier = Modifier.padding(bottom = 8.dp)
-            )
-            Spacer(Modifier.height(8.dp))
+            ) {
+                Text(
+                    text = stateText,
+                    color = stateColor,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+
+            // Tiempo Grande
             Text(
                 text = timeDisplay,
-                fontSize = 60.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.primary
+                fontSize = 72.sp,
+                fontWeight = FontWeight.Black,
+                color = stateColor,
+                style = MaterialTheme.typography.displayLarge
             )
-            Spacer(Modifier.height(16.dp))
 
+            Spacer(Modifier.height(24.dp))
+
+            // Botones de Control
             Row(
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (currentTask != null) {
-                    Button(onClick = {
-                        when (timerState) {
-                            PomodoroState.WORK, PomodoroState.SHORT_BREAK, PomodoroState.LONG_BREAK -> onPause()
-                            else -> onStart(currentTask!!)
-                        }
-                    }) {
+                    // Botón Play/Pause Principal
+                    FilledIconButton(
+                        onClick = {
+                            when (timerState) {
+                                PomodoroState.WORK, PomodoroState.SHORT_BREAK, PomodoroState.LONG_BREAK -> onPause()
+                                else -> onStart(currentTask)
+                            }
+                        },
+                        modifier = Modifier.size(72.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = stateColor)
+                    ) {
                         Icon(
                             imageVector = if (timerState == PomodoroState.PAUSED || timerState == PomodoroState.IDLE) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                            contentDescription = "Control Pomodoro"
+                            contentDescription = "Control",
+                            modifier = Modifier.size(36.dp)
                         )
                     }
-                    Button(onClick = onReset, enabled = timerState != PomodoroState.IDLE) {
-                        Icon(Icons.Filled.Stop, contentDescription = "Reiniciar")
+
+                    Spacer(modifier = Modifier.width(24.dp))
+
+                    // Botón Stop
+                    OutlinedIconButton(
+                        onClick = onReset,
+                        enabled = timerState != PomodoroState.IDLE,
+                        modifier = Modifier.size(56.dp),
+                        border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(
+                            Icons.Filled.Stop,
+                            contentDescription = "Reiniciar",
+                            tint = MaterialTheme.colorScheme.error
+                        )
                     }
-                    Button(onClick = {
-                        onGetTips(currentTask!!)
-                    }) {
-                        Text("Consejos IA")
-                    }
+                }
+            }
+
+            // Botón de IA (solo si hay tarea)
+            if (currentTask != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                TextButton(onClick = { onGetTips(currentTask) }) {
+                    Icon(Icons.Default.Lightbulb, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Ver Consejos de IA")
                 }
             }
         }
@@ -176,12 +215,8 @@ fun PomodoroTimer(
         AlertDialog(
             onDismissRequest = onContentDismiss,
             title = { Text("Consejos de Estudio") },
-            text = {
-                Text(aiContent)
-            },
-            confirmButton = {
-                TextButton(onClick = onContentDismiss) { Text("Cerrar") }
-            }
+            text = { Text(aiContent) },
+            confirmButton = { TextButton(onClick = onContentDismiss) { Text("Cerrar") } }
         )
     }
 }
@@ -198,9 +233,13 @@ fun TaskList(
                 item {
                     Text(
                         text = status.label,
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(16.dp, 8.dp),
-                        color = MaterialTheme.colorScheme.primary
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp, 12.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 }
                 items(tasks) { task ->
@@ -240,13 +279,12 @@ fun TaskItem(task: Task, onTaskAction: (Task, String) -> Unit) {
                 Text(
                     aiDetails,
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.tertiary
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                // Nota: La línea de aiDetails estaba duplicada en tu original, la he quitado.
                 Text(
                     "Dedicado: ${task.totalPomodoroCycles} ciclos | ${task.totalTimeSpentMs / 60000} min",
                     fontSize = 12.sp,
-                    color = Color.DarkGray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             if (task.status == TaskStatus.TODO || task.status == TaskStatus.IN_PROGRESS) {
