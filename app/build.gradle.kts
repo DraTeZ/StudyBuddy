@@ -1,9 +1,24 @@
+
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application) version "8.4.1"
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.gms.google.services)
 }
+
+// 2. LÓGICA DE CARGA: Define e inicializa el objeto Properties en el scope global
+val properties = Properties()
+val propertiesFile = project.rootProject.file("secrets.properties")
+
+if (propertiesFile.exists()) {
+    properties.load(propertiesFile.inputStream())
+} else {
+    // Es buena práctica añadir un mensaje de advertencia si no se encuentra
+    println("ADVERTENCIA: El archivo secrets.properties no fue encontrado en la raíz del proyecto.")
+}
+
 
 android {
     namespace = "com.example.studybuddy"
@@ -17,6 +32,13 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // 3. USO: Ahora la variable 'properties' está cargada y lista.
+        buildConfigField(
+            type = "String",
+            name = "GEMINI_API_KEY",
+            value = properties.getProperty("GEMINI_API_KEY", "")
+        )
     }
 
     buildTypes {
@@ -37,6 +59,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -70,7 +93,13 @@ dependencies {
     implementation("androidx.credentials:credentials:1.3.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
-    implementation(libs.firebase.ai)
+    //implementation(libs.firebase.ai)
+
+    // Si estás usando la clave API en lugar de Firebase AI,
+    // asegúrate de añadir la dependencia del SDK de Google AI
+    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+
+
 
     // 6. Dependencias para Testing
     testImplementation("junit:junit:4.13.2")
@@ -82,6 +111,5 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.7")
     implementation("androidx.compose.foundation:foundation")
 
-    // 7. Dependencias para el calendario
 
 }
