@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Date
 import java.util.UUID
+import java.util.Calendar // IMPORTANTE: Necesario para calcular los 30 días
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.UserProfileChangeRequest
 
@@ -40,8 +41,6 @@ class StudyBuddyViewModel(
     private var sessionTimeSpentMs: Long = 0L
     private var stateBeforePause: PomodoroState = PomodoroState.IDLE
 
-
-
     // Estado de las tareas
     private val _tasks = MutableStateFlow(emptyList<Task>())
     val tasks: StateFlow<List<Task>> = _tasks
@@ -58,7 +57,7 @@ class StudyBuddyViewModel(
 
     // Estado para el contenido generado (Consejos/Resúmenes de IA)
     private val _aiContentResult = MutableStateFlow<String?>(null)
-    val aiContentResult: StateFlow<String?> = _aiContentResult // ESTE ES OBSERVADO POR LA UI
+    val aiContentResult: StateFlow<String?> = _aiContentResult
 
     // Configuración Pomodoro (25/5 minutos)
     private val workDurationMs = 25 * 60 * 1000L
@@ -75,14 +74,20 @@ class StudyBuddyViewModel(
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
-    // --- (ERROR 1) AÑADIDO: ESTADO PARA MODO OSCURO ---
+    // --- ESTADO PARA MODO OSCURO ---
     private val _isDarkMode = MutableStateFlow(false)
     val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
 
     fun setDarkMode(enabled: Boolean) {
         _isDarkMode.value = enabled
     }
-    // --- FIN DE LA ADICIÓN ---
+
+    // --- (NUEVO) ESTADOS PREMIUM Y ESTADÍSTICAS ---
+    private val _isUserPremium = MutableStateFlow(false)
+    val isUserPremium: StateFlow<Boolean> = _isUserPremium.asStateFlow()
+
+    private val _monthlyStats = MutableStateFlow(MonthlyStats(0, 0L, "N/A", 0))
+    val monthlyStats: StateFlow<MonthlyStats> = _monthlyStats.asStateFlow()
 
 
     // 2. Función para manejar el login (Email/Pass)
@@ -109,7 +114,7 @@ class StudyBuddyViewModel(
         }
     }
 
-    // Función para el inicio de sesión con Google (usando el ID Token)
+    // Función para el inicio de sesión con Google
     fun signInWithGoogle(idToken: String) {
         viewModelScope.launch {
             _authState.value = AuthState.Loading
@@ -129,13 +134,11 @@ class StudyBuddyViewModel(
         }
     }
 
-    // Maneja errores que vienen de MainActivity (ej. Credential Manager)
     fun handleAuthError(message: String) {
         _authState.value = AuthState.Error(message)
         viewModelScope.launch { delay(5000); if (_authState.value is AuthState.Error) resetAuthState() }
     }
 
-    // Forza el estado de éxito si la sesión ya existe al abrir la app
     fun forceAuthStateSuccess() {
         if (auth.currentUser != null) {
             _authState.value = AuthState.Success
@@ -158,25 +161,15 @@ class StudyBuddyViewModel(
                         Log.d("ViewModel", "createUserWithEmailAndPassword:success")
 
                         val user = auth.currentUser
-
-                        // Creamos la solicitud de cambio de perfil para agregar el Nombre
                         val profileUpdates = UserProfileChangeRequest.Builder()
                             .setDisplayName(name)
                             .build()
 
                         user?.updateProfile(profileUpdates)
                             ?.addOnCompleteListener { updateTask ->
-                                if (updateTask.isSuccessful) {
-                                    Log.d("ViewModel", "User profile updated.")
-                                    onUserAuthenticated() // Inicializa listeners de Firestore
-                                    _authState.value = AuthState.Success
-                                } else {
-                                    Log.w("ViewModel", "Error updating profile", updateTask.exception)
-                                    onUserAuthenticated()
-                                    _authState.value = AuthState.Success
-                                }
+                                onUserAuthenticated()
+                                _authState.value = AuthState.Success
                             }
-
                     } else {
                         Log.w("ViewModel", "createUserWithEmailAndPassword:failure", task.exception)
                         _authState.value = AuthState.Error(task.exception?.localizedMessage ?: "Fallo al registrar.")
@@ -185,10 +178,10 @@ class StudyBuddyViewModel(
         }
     }
 
-    // 4. Función para resetear el estado (útil para la navegación)
     fun resetAuthState() {
         _authState.value = AuthState.Idle
     }
+
     fun onUserAuthenticated() {
         userId = auth.currentUser?.uid
         if (userId == null) {
@@ -197,7 +190,70 @@ class StudyBuddyViewModel(
         }
         tasksCollection = db.collection("users").document(userId!!).collection("tasks")
         Log.d("Firestore", "User authenticated with UID: $userId. Listening for task updates.")
+
+        // (NUEVO) Verificamos si es Premium al autenticar
+        checkPremiumStatus()
+
         listenForTaskUpdates()
+    }
+
+    // (NUEVO) Lógica para verificar Premium en Firestore
+    private fun checkPremiumStatus() {
+        val currentUid = userId ?: return
+        db.collection("users").document(currentUid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+
+                if (snapshot != null && snapshot.exists()) {
+                    val isPremium = snapshot.getBoolean("isPremium") ?: false
+                    _isUserPremium.value = isPremium
+
+                    if (isPremium) {
+                        calculateMonthlyStats()
+                    }
+                } else {
+                    // Crea el documento si no existe
+                    val defaultData = hashMapOf("isPremium" to false)
+                    db.collection("users").document(currentUid).set(defaultData)
+                    _isUserPremium.value = false
+                }
+            }
+    }
+
+    // (NUEVO) Lógica matemática para las estadísticas
+    private fun calculateMonthlyStats() {
+        val allTasks = _tasks.value
+        if (allTasks.isEmpty()) return
+
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.DAY_OF_YEAR, -30)
+        val oneMonthAgo = calendar.time
+
+        // Filtramos tareas del último mes
+        val recentTasks = allTasks.filter {
+            it.creationDate != null && it.creationDate.after(oneMonthAgo)
+        }
+
+        val completedTasks = recentTasks.filter { it.status == TaskStatus.COMPLETED }
+
+        val countCompleted = completedTasks.size
+        val totalTimeMs = recentTasks.sumOf { it.totalTimeSpentMs }
+        val totalMinutes = totalTimeMs / 60000
+
+        val mostProductive = completedTasks
+            .groupBy { it.subject }
+            .maxByOrNull { it.value.size }
+            ?.key ?: "N/A"
+
+        val totalCount = recentTasks.size
+        val rate = if (totalCount > 0) (countCompleted * 100) / totalCount else 0
+
+        _monthlyStats.value = MonthlyStats(
+            totalTasksCompleted = countCompleted,
+            totalMinutesStudied = totalMinutes,
+            mostProductiveSubject = mostProductive,
+            completionRate = rate
+        )
     }
 
     private fun listenForTaskUpdates() {
@@ -214,7 +270,11 @@ class StudyBuddyViewModel(
                     val firestoreTasks = snapshot.toObjects(Task::class.java)
                     _tasks.value = firestoreTasks
                     updateSortedTasks()
-                    Log.d("Firestore", "Tasks updated from Firestore: ${firestoreTasks.size} tasks loaded.")
+
+                    // Si es premium, recalculamos estadísticas al cambiar las tareas
+                    if (_isUserPremium.value) {
+                        calculateMonthlyStats()
+                    }
                 }
             }
     }
@@ -232,43 +292,31 @@ class StudyBuddyViewModel(
         val taskWithId = task.copy(id = task.id.ifBlank { UUID.randomUUID().toString() })
         tasksCollection.document(taskWithId.id).set(taskWithId)
             .addOnSuccessListener {
-                Log.d("Firestore", "Paso 1/2: Tarea base añadida con ID: ${taskWithId.id}")
-                viewModelScope.launch {
-                    analyzeAndSaveAIData(taskWithId)
-                }
+                viewModelScope.launch { analyzeAndSaveAIData(taskWithId) }
             }
-            .addOnFailureListener { e ->
-                Log.w("Firestore", "Error al añadir la tarea base", e)
-            }
+            .addOnFailureListener { e -> Log.w("Firestore", "Error al añadir tarea", e) }
     }
 
     fun updateTaskStatus(taskId: String, newStatus: TaskStatus) {
         tasksCollection.document(taskId).update("status", newStatus)
-            .addOnSuccessListener { Log.d("Firestore", "Task $taskId status updated.") }
-            .addOnFailureListener { e -> Log.w("Firestore", "Error updating task status.", e) }
     }
 
     fun deleteTask(task: Task) {
+        // (PROTECCIÓN) Bug fix: No borrar si está activa en Pomodoro
         if (_currentTask.value?.id == task.id && _timerState.value != PomodoroState.IDLE) {
             Log.w("ViewModel", "Intento de borrar la tarea activa bloqueado.")
             return
         }
         tasksCollection.document(task.id).delete()
             .addOnSuccessListener {
-                Log.d("Firestore", "Task ${task.id} deleted.")
-                // Opcional: Si borramos una tarea que estaba seleccionada pero en IDLE, limpiamos la selección
                 if (_currentTask.value?.id == task.id) {
                     _currentTask.value = null
                 }
             }
-            .addOnFailureListener { e -> Log.w("Firestore", "Error deleting task.", e) }
     }
 
     private fun savePomodoroSession(task: Task) {
-        if (userId == null || task.id.isBlank() || sessionStartTime == null) {
-            Log.w("Firestore", "Cannot save session, missing data.")
-            return
-        }
+        if (userId == null || task.id.isBlank() || sessionStartTime == null) return
 
         val sessionToSave = PomodoroSession(
             startDatetime = sessionStartTime,
@@ -276,12 +324,8 @@ class StudyBuddyViewModel(
             completedCycles = sessionCyclesCompleted,
             timeUsed = sessionTimeSpentMs
         )
-        Log.d("Firestore", "Saving Pomodoro session: $sessionToSave")
 
         tasksCollection.document(task.id).collection("pomodoroSessions").add(sessionToSave)
-            .addOnSuccessListener { Log.d("Firestore", "Pomodoro session saved for task ${task.id}") }
-            .addOnFailureListener { e -> Log.w("Firestore", "Error saving Pomodoro session", e) }
-
         updateTaskTimeSpent(task, sessionTimeSpentMs-(sessionCyclesCompleted*workDurationMs), 0)
     }
 
@@ -291,9 +335,7 @@ class StudyBuddyViewModel(
                 "totalTimeSpentMs" to FieldValue.increment(timeToAddMs),
                 "totalPomodoroCycles" to FieldValue.increment(cyclesToAdd.toLong())
             )
-        ).addOnFailureListener { e ->
-            Log.w("Firestore", "Error updating time for ${task.id}", e)
-        }
+        )
 
         if (_currentTask.value?.id == task.id) {
             _currentTask.value = _tasks.value.find { it.id == task.id }
@@ -303,13 +345,11 @@ class StudyBuddyViewModel(
 
     // --- POMODORO TIMER ---
     fun startPomodoro(task: Task) {
-        Log.d("Pomodoro", "Starting new Pomodoro session for task: ${task.name}")
         if (_timerState.value != PomodoroState.IDLE && _currentTask.value?.id == task.id) {
             resumePomodoro()
             return
         }
         timerJob?.cancel()
-
         sessionStartTime = Date()
         sessionCyclesCompleted = 0
         sessionTimeSpentMs = 0L
@@ -322,28 +362,23 @@ class StudyBuddyViewModel(
     }
 
     fun pausePomodoro() {
-        Log.d("Pomodoro", "Pausing timer.")
         if (_timerState.value == PomodoroState.PAUSED || _timerState.value == PomodoroState.IDLE) return
         timerJob?.cancel()
         stateBeforePause = _timerState.value
         _timerState.value = PomodoroState.PAUSED
-        Log.d("Pomodoro", "Timer paused, partial time registered: $sessionTimeSpentMs ms")
     }
 
     fun resumePomodoro(){
         if (_timerState.value != PomodoroState.PAUSED) return
         _timerState.value = stateBeforePause
-        Log.d("Pomodoro", "Resuming timer.")
         runTimer()
     }
 
     fun resetPomodoro() {
-        Log.d("Pomodoro", "Resetting timer.")
         timerJob?.cancel()
         val task = _currentTask.value
 
         if (task != null) {
-            Log.d("Pomodoro", "Updating task time spent.")
             savePomodoroSession(task)
             if (task.status != TaskStatus.COMPLETED) {
                 updateTaskStatus(task.id, TaskStatus.TODO)
@@ -418,21 +453,15 @@ class StudyBuddyViewModel(
                     "aiReasoning" to result.reasoning
                 )
                 tasksCollection.document(task.id).update(aiDataMap)
-                    .addOnSuccessListener {
-                        Log.d("Firestore", "Paso 2/2: Datos de IA actualizados para la tarea ${task.id}")
-                    }
-                    .addOnFailureListener { e ->
-                        Log.w("Firestore", "Error al actualizar la tarea con datos de IA", e)
-                    }
             } catch (e: Exception) {
-                println("Error al analizar la dificultad con Gemini: ${e.message}")
+                println("Error Gemini: ${e.message}")
             }
         }
     }
 
     fun getAITips(task: Task) {
         viewModelScope.launch {
-            _aiContentResult.value = "Generando consejos de estudio para ${task.name}..."
+            _aiContentResult.value = "Generando consejos de estudio..."
             try {
                 val tips = geminiService.generateStudyTips(task)
                 _aiContentResult.value = tips
@@ -440,26 +469,24 @@ class StudyBuddyViewModel(
                     list.map { if (it.id == task.id) it.copy(aiStudyTips = tips) else it }
                 }
             } catch (e: Exception) {
-                println("Error al obtener consejos de IA: ${e.message}")
-                _aiContentResult.value = "Error al obtener consejos de IA: ${e.message}. Inténtalo de nuevo."
+                _aiContentResult.value = "Error al obtener consejos: ${e.message}"
             }
         }
     }
 
     fun generateContentForTask(task: Task, contentType: String) {
         viewModelScope.launch {
-            _aiContentResult.value = "Generando $contentType para ${task.name}..."
+            _aiContentResult.value = "Generando $contentType..."
             try {
                 val content = geminiService.generateContent(task, contentType)
                 _aiContentResult.value = content
             } catch (e: Exception) {
-                println("Error al generar contenido con Gemini: ${e.message}")
-                _aiContentResult.value = "Error al generar contenido: ${e.message}"
+                _aiContentResult.value = "Error: ${e.message}"
             }
         }
     }
 
-    // --- OTROS ESTADOS DE UI (FEEDBACK, PASSWORD RESET) ---
+    // --- OTROS ESTADOS DE UI ---
     private val _resetState = MutableStateFlow<PasswordResetState>(PasswordResetState.Idle)
     val resetState: StateFlow<PasswordResetState> = _resetState.asStateFlow()
 
@@ -467,18 +494,13 @@ class StudyBuddyViewModel(
         viewModelScope.launch {
             _resetState.value = PasswordResetState.Loading
             if (email.isBlank() || !email.contains("@")) {
-                _resetState.value = PasswordResetState.Error("Correo electrónico inválido.")
+                _resetState.value = PasswordResetState.Error("Correo inválido.")
                 return@launch
             }
             auth.sendPasswordResetEmail(email)
                 .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Log.d("ViewModel", "Password reset email sent to $email")
-                        _resetState.value = PasswordResetState.Success
-                    } else {
-                        Log.w("ViewModel", "sendPasswordResetEmail:failure", task.exception)
-                        _resetState.value = PasswordResetState.Error(task.exception?.localizedMessage ?: "Fallo al enviar correo.")
-                    }
+                    if (task.isSuccessful) _resetState.value = PasswordResetState.Success
+                    else _resetState.value = PasswordResetState.Error(task.exception?.localizedMessage ?: "Error.")
                 }
         }
     }
@@ -493,14 +515,9 @@ class StudyBuddyViewModel(
     fun sendFeedback(type: String, description: String) {
         viewModelScope.launch {
             _feedbackState.value = FeedbackState.Loading
-            delay(1500) // Simulación
-
-            if (description.length > 10) {
-                Log.d("ViewModel", "Enviando feedback: $type - $description")
-                _feedbackState.value = FeedbackState.Success
-            } else {
-                _feedbackState.value = FeedbackState.Error("La descripción es muy corta.")
-            }
+            delay(1500)
+            if (description.length > 10) _feedbackState.value = FeedbackState.Success
+            else _feedbackState.value = FeedbackState.Error("Descripción muy corta.")
         }
     }
 
@@ -517,10 +534,11 @@ class StudyBuddyViewModel(
         _timerState.value = PomodoroState.IDLE
         _timeRemainingMs.value = 0L
         _authState.value = AuthState.Idle
+        _isUserPremium.value = false // Reset premium state
     }
 }
 
-// --- INTERFACES SELLADAS PARA LOS ESTADOS DE UI ---
+// --- INTERFACES SELLADAS Y DATA CLASSES ---
 
 sealed interface AuthState {
     object Idle : AuthState
@@ -542,3 +560,11 @@ sealed interface FeedbackState {
     object Success : FeedbackState
     data class Error(val message: String) : FeedbackState
 }
+
+// (NUEVO) Modelo para las estadísticas
+data class MonthlyStats(
+    val totalTasksCompleted: Int,
+    val totalMinutesStudied: Long,
+    val mostProductiveSubject: String,
+    val completionRate: Int
+)

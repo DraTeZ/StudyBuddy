@@ -44,6 +44,8 @@ fun HomeScreen(viewModel: StudyBuddyViewModel) {
     val timeRemainingMs by viewModel.timeRemainingMs.collectAsState()
     val aiContent by viewModel.aiContentResult.collectAsState()
     val sortedTasks by viewModel.sortedTasks.collectAsState()
+
+    // Contexto para el Toast
     val context = LocalContext.current
 
     Column(
@@ -70,6 +72,7 @@ fun HomeScreen(viewModel: StudyBuddyViewModel) {
                     "complete" -> viewModel.updateTaskStatus(task.id, TaskStatus.COMPLETED)
 
                     "delete" -> {
+                        // Lógica de protección contra borrado durante Pomodoro activo
                         if (currentTask?.id == task.id && timerState != PomodoroState.IDLE) {
                             Toast.makeText(context, "Detén el temporizador antes de borrar esta tarea", Toast.LENGTH_SHORT).show()
                         } else {
@@ -502,7 +505,19 @@ fun StudyBuddyApp(
         composable("main") {
             AppScreen(
                 viewModel = viewModel,
-                onLogout = onLogout // Pasa el callback de MainActivity
+                onLogout = onLogout, // Pasa el callback de MainActivity
+                // --- NUEVO: Pasamos la navegación a Premium Stats ---
+                onStatsClick = {
+                    navController.navigate("premium_stats")
+                }
+            )
+        }
+
+        // --- NUEVO COMPOSABLE PARA ESTADÍSTICAS ---
+        composable("premium_stats") {
+            PremiumStatsScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() }
             )
         }
 

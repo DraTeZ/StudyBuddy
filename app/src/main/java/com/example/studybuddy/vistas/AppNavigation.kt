@@ -10,7 +10,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.example.studybuddy.R
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -56,7 +55,11 @@ val bottomNavItems = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppScreen(viewModel: StudyBuddyViewModel,onLogout: () -> Unit) {
+fun AppScreen(
+    viewModel: StudyBuddyViewModel,
+    onLogout: () -> Unit,
+    onStatsClick: () -> Unit // <--- 1. NUEVO PARÁMETRO
+) {
     // Controlador de navegación para las pestañas (Home, Calendar, Profile)
     val appNavController = rememberNavController()
     val navBackStackEntry by appNavController.currentBackStackEntryAsState()
@@ -68,19 +71,19 @@ fun AppScreen(viewModel: StudyBuddyViewModel,onLogout: () -> Unit) {
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Image(
-                            painter = painterResource(id = com.example.studybuddy.R.drawable.logo_studybuddy),
+                            painter = painterResource(id = R.drawable.logo_studybuddy),
                             contentDescription = "Logo",
                             modifier = Modifier.size(65.dp) // Logo pequeño
                         )
                         Spacer(modifier = Modifier.width(12.dp)) // Espacio
-                    val title = when (currentRoute) {
-                        AppScreenRoute.Calendar.route -> "Calendario"
-                        AppScreenRoute.Profile.route -> "Perfil y Ajustes"
-                        else -> "Study Buddy"
-                    }
-                    Text(title, fontWeight = FontWeight.Bold)
+                        val title = when (currentRoute) {
+                            AppScreenRoute.Calendar.route -> "Calendario"
+                            AppScreenRoute.Profile.route -> "Perfil y Ajustes"
+                            else -> "Study Buddy"
+                        }
+                        Text(title, fontWeight = FontWeight.Bold)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -118,8 +121,11 @@ fun AppScreen(viewModel: StudyBuddyViewModel,onLogout: () -> Unit) {
                 CalendarScreen(viewModel = viewModel)
             }
             composable(AppScreenRoute.Profile.route) {
-                ProfileScreen(viewModel = viewModel, onLogout = onLogout)
-
+                ProfileScreen(
+                    viewModel = viewModel,
+                    onLogout = onLogout,
+                    onStatsClick = onStatsClick // <--- 2. PASAMOS EL CALLBACK A PROFILE
+                )
             }
         }
     }
