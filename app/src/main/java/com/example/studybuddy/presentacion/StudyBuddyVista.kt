@@ -298,7 +298,12 @@ class StudyBuddyViewModel(
     }
 
     fun updateTaskStatus(taskId: String, newStatus: TaskStatus) {
+        if (newStatus == TaskStatus.COMPLETED && _currentTask.value?.id == taskId) {
+            resetPomodoro()
+        }
         tasksCollection.document(taskId).update("status", newStatus)
+            .addOnSuccessListener { Log.d("Firestore", "Task $taskId status updated.") }
+            .addOnFailureListener { e -> Log.w("Firestore", "Error updating task status.", e) }
     }
 
     fun deleteTask(task: Task) {

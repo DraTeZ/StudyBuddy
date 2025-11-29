@@ -99,7 +99,7 @@ dependencies {
     // asegúrate de añadir la dependencia del SDK de Google AI
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
     implementation("androidx.compose.material:material-icons-extended:1.6.0")
-
+    implementation("com.google.android.gms:play-services-ads:23.0.0")
 
     // 6. Dependencias para Testing
     testImplementation("junit:junit:4.13.2")
