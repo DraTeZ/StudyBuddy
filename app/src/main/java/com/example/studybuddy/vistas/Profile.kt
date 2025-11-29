@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Timeline // <--- Importado para el icono de estadísticas
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,7 +23,8 @@ import com.google.firebase.Firebase
 @Composable
 fun ProfileScreen(
     viewModel: StudyBuddyViewModel,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onStatsClick: () -> Unit // <--- NUEVO PARÁMETRO
 ) {
     val currentUser = Firebase.auth.currentUser
     val userName = currentUser?.displayName ?: "Sin Nombre"
@@ -106,6 +108,15 @@ fun ProfileScreen(
                 onCheckedChange = { viewModel.setDarkMode(it) }
             )
             Divider()
+
+            // --- NUEVO BOTÓN: Estadísticas Premium ---
+            SettingItem(
+                title = "Estadísticas Premium",
+                icon = Icons.Default.Timeline,
+                onClick = onStatsClick
+            )
+            Divider()
+            // ----------------------------------------
 
             SettingItem(
                 title = "Acerca de StudyBuddy",

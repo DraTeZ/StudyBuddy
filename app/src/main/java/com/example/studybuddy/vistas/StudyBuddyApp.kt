@@ -44,12 +44,20 @@ fun HomeScreen(viewModel: StudyBuddyViewModel) {
     val timeRemainingMs by viewModel.timeRemainingMs.collectAsState()
     val aiContent by viewModel.aiContentResult.collectAsState()
     val sortedTasks by viewModel.sortedTasks.collectAsState()
+    val isPremium by viewModel.isUserPremium.collectAsState()
+    var showRestartDialog by remember { mutableStateOf(false) }
+    var taskToRestart by remember { mutableStateOf<Task?>(null) }
+
+    // Contexto para el Toast
     val context = LocalContext.current
 
     Column(
         modifier = Modifier
             .fillMaxSize()
     ) {
+        if (!isPremium) {
+            AdMobBanner()
+        }
         PomodoroTimer(
             currentTask = currentTask,
             timerState = timerState,
@@ -66,16 +74,58 @@ fun HomeScreen(viewModel: StudyBuddyViewModel) {
             sortedTasks = sortedTasks,
             onTaskAction = { task, action ->
                 when (action) {
-                    "start" -> viewModel.startPomodoro(task)
+                    "start" -> {
+                        if (task.status == TaskStatus.COMPLETED) {
+                            taskToRestart = task
+                            showRestartDialog = true
+                        } else {
+                            viewModel.startPomodoro(task)
+                        }
+                    }
                     "complete" -> viewModel.updateTaskStatus(task.id, TaskStatus.COMPLETED)
 
                     "delete" -> {
+                        // Lógica de protección contra borrado durante Pomodoro activo
                         if (currentTask?.id == task.id && timerState != PomodoroState.IDLE) {
                             Toast.makeText(context, "Detén el temporizador antes de borrar esta tarea", Toast.LENGTH_SHORT).show()
                         } else {
                             viewModel.deleteTask(task)
                         }
                     }
+                }
+            }
+        )
+    }
+
+    if (showRestartDialog && taskToRestart != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showRestartDialog = false
+                taskToRestart = null
+            },
+            title = { Text("¿Reabrir tarea?") },
+            text = {
+                Text("Esta tarea ya está marcada como completada. ¿Deseas volver a trabajar en ella? Pasará a estado 'En Progreso'.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        taskToRestart?.let { viewModel.startPomodoro(it) }
+                        showRestartDialog = false
+                        taskToRestart = null
+                    }
+                ) {
+                    Text("Sí, reabrir")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showRestartDialog = false
+                        taskToRestart = null
+                    }
+                ) {
+                    Text("Cancelar")
                 }
             }
         )
@@ -502,7 +552,19 @@ fun StudyBuddyApp(
         composable("main") {
             AppScreen(
                 viewModel = viewModel,
-                onLogout = onLogout // Pasa el callback de MainActivity
+                onLogout = onLogout, // Pasa el callback de MainActivity
+                // --- NUEVO: Pasamos la navegación a Premium Stats ---
+                onStatsClick = {
+                    navController.navigate("premium_stats")
+                }
+            )
+        }
+
+        // --- NUEVO COMPOSABLE PARA ESTADÍSTICAS ---
+        composable("premium_stats") {
+            PremiumStatsScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() }
             )
         }
 
